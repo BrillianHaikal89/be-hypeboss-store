@@ -18,8 +18,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Static files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Static files (gunakan /tmp di Vercel agar mendukung serving file yang baru diupload)
+app.use('/uploads', express.static(process.env.VERCEL ? '/tmp/uploads' : path.join(__dirname, 'uploads')));
+app.use('/public', express.static(process.env.VERCEL ? '/tmp/public' : path.join(__dirname, '../public')));
 
 // Setup routes
 app.use('/api', routes);

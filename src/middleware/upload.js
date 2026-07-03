@@ -3,10 +3,14 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 
-// Pastikan folder uploads ada
-const uploadDir = 'uploads/payment-proofs';
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+// Pastikan folder uploads ada (gunakan /tmp di Vercel agar tidak EROFS)
+const uploadDir = process.env.VERCEL ? '/tmp/uploads/payment-proofs' : 'uploads/payment-proofs';
+try {
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
+} catch (err) {
+    console.warn('⚠️ Gagal membuat folder uploads (kemungkinan Vercel read-only filesystem):', err.message);
 }
 
 // Konfigurasi storage

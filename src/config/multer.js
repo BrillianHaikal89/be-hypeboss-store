@@ -4,8 +4,12 @@ import path from 'path';
 import fs from 'fs';
 
 const ensureDirectoryExists = (dirPath) => {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
+  try {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+  } catch (err) {
+    console.warn('⚠️ Gagal membuat direktori:', err.message);
   }
 };
 
@@ -44,6 +48,10 @@ const storage = multer.diskStorage({
         // Simpan di folder general jika tidak ada category_id
         uploadPath = 'public/products/general';
       }
+    }
+    
+    if (process.env.VERCEL) {
+      uploadPath = uploadPath.replace('public/', '/tmp/public/');
     }
     
     ensureDirectoryExists(uploadPath);
