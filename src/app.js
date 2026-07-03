@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import routes from './modules/index.route.js';
 
 // ES6 modules fix for __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -20,19 +21,9 @@ app.use(express.urlencoded({ extended: true }));
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Import routes (ESM dynamic import)
-const setupRoutes = async () => {
-  try {
-    const { default: routes } = await import('./modules/index.route.js');
-    app.use('/api', routes);
-    console.log('✅ Routes loaded successfully');
-  } catch (error) {
-    console.error('❌ Error loading routes:', error);
-  }
-};
-
 // Setup routes
-await setupRoutes();
+app.use('/api', routes);
+
 
 /**
  * 404 handler (HARUS TANPA '*')
