@@ -1,115 +1,156 @@
 // src/config/db.js
+
 import pkg from "pg";
 const { Pool } = pkg;
 import dotenv from "dotenv";
 
 dotenv.config();
 
-// Validasi environment variables
-const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'];
-const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+// ===============================
+// Debug Environment
+// ===============================
+console.log("========== DATABASE CONFIG ==========");
+console.log({
+  NODE_ENV: process.env.NODE_ENV,
+  DB_HOST: process.env.DB_HOST,
+  DB_PORT: process.env.DB_PORT,
+  DB_NAME: process.env.DB_NAME,
+  DB_USER: process.env.DB_USER,
+  DATABASE_URL: process.env.DATABASE_URL ? "Loaded ✅" : "Not Found ❌",
+});
+console.log("=====================================");
 
-if (missingEnvVars.length > 0) {
-  console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
-  console.error('Please check your .env file or Vercel Environment Variables settings');
+// ===============================
+// Validasi Environment Variables
+// ===============================
+if (
+  !process.env.DATABASE_URL &&
+  (!process.env.DB_HOST ||
+    !process.env.DB_PORT ||
+    !process.env.DB_USER ||
+    !process.env.DB_PASSWORD ||
+    !process.env.DB_NAME)
+) {
+  console.error("❌ Database environment variables are incomplete.");
 }
 
-// Konfigurasi pool connection
-const databaseConnection = new Pool({
-  host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT) || 5432,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
+// ===============================
+// Konfigurasi Pool
+// ===============================
+const poolConfig = process.env.DATABASE_URL
+  ? {
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false,
+    },
+  }
+  : {
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    ssl: {
+      rejectUnauthorized: false,
+    },
+  };
 
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
+const databaseConnection = new Pool({
+  ...poolConfig,
 
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
+  keepAlive: true,
 });
 
-// Event listeners untuk monitoring
-databaseConnection.on('connect', () => {
-  console.log('🔗 PostgreSQL client connected');
+// ===============================
+// Event Listener
+// ===============================
+databaseConnection.on("connect", () => {
+  console.log("✅ PostgreSQL Client Connected");
 });
 
-databaseConnection.on('remove', () => {
-  console.log('🔌 PostgreSQL client removed');
+databaseConnection.on("remove", () => {
+  console.log("🔌 PostgreSQL Client Removed");
 });
 
-databaseConnection.on('error', (err) => {
-  console.error('💥 Unexpected PostgreSQL error:', err.message);
+databaseConnection.on("error", (err) => {
+  console.error("💥 PostgreSQL Pool Error:", err.message);
 });
 
-// Fungsi untuk menguji koneksi
-const testConnection = async () => {
+// ===============================
+// Test Connection
+// ===============================
+export const testConnection = async () => {
+  let client;
+
   try {
-    const client = await databaseConnection.connect();
-    const result = await client.query('SELECT NOW()');
-    console.log('✅ PostgreSQL connected at:', result.rows[0].now);
-    client.release();
+    client = await databaseConnection.connect();
+
+    const result = await client.query("SELECT NOW()");
+
+    console.log("✅ Database Connected");
+    console.log("🕒 Server Time:", result.rows[0].now);
+
     return true;
-  } catch (error) {
-    console.error('❌ PostgreSQL connection test failed:', error.message);
+  } catch (err) {
+    console.error("❌ Database Connection Failed");
+    console.error(err.message);
     return false;
+  } finally {
+    if (client) client.release();
   }
 };
 
-// Connect dan test saat startup
-databaseConnection.connect()
-  .then(() => {
-    console.log('✔️ PostgreSQL Connected');
-    // Test koneksi setelah connect
-    setTimeout(testConnection, 1000);
-  })
-  .catch((err) => {
-    console.error('❌ PostgreSQL Connection Error:', err.message);
-    console.error('⚠️  Check your database configuration in .env file');
-  });
-
-// Helper function untuk query dengan logging
+// ===============================
+// Query Helper
+// ===============================
 export const query = async (text, params) => {
   const start = Date.now();
+
   try {
     const result = await databaseConnection.query(text, params);
-    const duration = Date.now() - start;
-    console.log(`📝 Executed query: ${text}`, {
-      duration: `${duration}ms`,
-      rows: result.rowCount
+
+    console.log("📝 Query Executed", {
+      duration: `${Date.now() - start}ms`,
+      rows: result.rowCount,
     });
+
     return result;
-  } catch (error) {
-    console.error(`❌ Query error: ${text}`, {
-      params: params,
-      error: error.message
+  } catch (err) {
+    console.error("❌ Query Error");
+
+    console.error({
+      query: text,
+      params,
+      message: err.message,
     });
-    throw error;
+
+    throw err;
   }
 };
 
-// Helper function untuk transaction
+// ===============================
+// Transaction Helper
+// ===============================
 export const transaction = async (callback) => {
   const client = await databaseConnection.connect();
 
   try {
-    await client.query('BEGIN');
+    await client.query("BEGIN");
+
     const result = await callback(client);
-    await client.query('COMMIT');
+
+    await client.query("COMMIT");
+
     return result;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
   } finally {
     client.release();
   }
 };
 
-// Export default dan named exports
 export default databaseConnection;
-
-// Named exports tambahan
-export { testConnection };
