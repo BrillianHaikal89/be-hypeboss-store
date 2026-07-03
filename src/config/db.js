@@ -21,11 +21,15 @@ const databaseConnection = new Pool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  
-  // Konfigurasi tambahan untuk performance
-  max: 20, // maksimum koneksi di pool
-  idleTimeoutMillis: 30000, // koneksi idle ditutup setelah 30 detik
-  connectionTimeoutMillis: 2000, // timeout saat connect
+
+  ssl:
+    process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: false }
+      : false,
+
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
 });
 
 // Event listeners untuk monitoring
@@ -90,7 +94,7 @@ export const query = async (text, params) => {
 // Helper function untuk transaction
 export const transaction = async (callback) => {
   const client = await databaseConnection.connect();
-  
+
   try {
     await client.query('BEGIN');
     const result = await callback(client);
